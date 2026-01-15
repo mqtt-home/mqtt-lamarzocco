@@ -3,7 +3,7 @@ import { Coffee, Sun, Moon, Wifi, WifiOff } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { setMode } from '@/lib/api';
 import { useTheme } from '@/contexts/ThemeContext';
-import { DoseMode, getModeDisplayName } from '@/types/status';
+import { DoseMode, getModeDisplayName, getDoseWeight } from '@/types/status';
 
 export function App() {
   const { status, isConnected, error, reconnect } = useSSE();
@@ -89,6 +89,7 @@ export function App() {
           {modes.map((mode) => {
             const isActive = status?.mode === mode;
             const isLoadingThis = isLoading === mode;
+            const doseWeight = getDoseWeight(mode, status ?? undefined);
 
             return (
               <button
@@ -105,7 +106,12 @@ export function App() {
                   ${isLoadingThis ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
                 `}
               >
-                <span className="text-lg font-medium">{getModeDisplayName(mode)}</span>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-lg font-medium">{getModeDisplayName(mode)}</span>
+                  {doseWeight !== undefined && (
+                    <span className="text-sm text-muted-foreground tabular-nums">{doseWeight}g</span>
+                  )}
+                </div>
                 {isActive && (
                   <span className="text-xs uppercase tracking-wide bg-primary text-primary-foreground px-2 py-1 rounded">
                     Active

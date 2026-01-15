@@ -31,6 +31,8 @@ type Client struct {
 	model  string
 
 	currentMode DoseMode
+	dose1       *DoseInfo
+	dose2       *DoseInfo
 	modeLock    sync.RWMutex
 
 	onStatusChange func(MachineStatus)
@@ -412,30 +414,51 @@ func (c *Client) fetchCurrentMode() error {
 
 	logger.Debug("Dashboard response", "body", string(body))
 
-	// Look for BrewByWeightDoses widget in the response
-	mode := c.extractModeFromDashboard(body)
+	// Extract mode and dose info from dashboard
+	data := c.extractDataFromDashboard(body)
 
 	c.modeLock.Lock()
 	oldMode := c.currentMode
-	c.currentMode = mode
+	oldDose1 := c.dose1
+	oldDose2 := c.dose2
+	c.currentMode = data.mode
+	c.dose1 = data.dose1
+	c.dose2 = data.dose2
 	c.modeLock.Unlock()
 
-	if oldMode != mode {
+	// Check if anything changed
+	changed := oldMode != data.mode
+	if !changed && data.dose1 != nil && (oldDose1 == nil || oldDose1.Weight != data.dose1.Weight) {
+		changed = true
+	}
+	if !changed && data.dose2 != nil && (oldDose2 == nil || oldDose2.Weight != data.dose2.Weight) {
+		changed = true
+	}
+
+	if changed {
 		c.notifyStatusChange()
 	}
 
-	logger.Debug("Current mode", "mode", mode)
+	logger.Debug("Current mode", "mode", data.mode, "dose1", data.dose1, "dose2", data.dose2)
 	return nil
 }
 
-func (c *Client) extractModeFromDashboard(body []byte) DoseMode {
-	// Parse JSON to find the mode in various possible locations
+type dashboardData struct {
+	mode  DoseMode
+	dose1 *DoseInfo
+	dose2 *DoseInfo
+}
+
+func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
+	result := dashboardData{mode: DoseModeContinuous}
+
+	// Parse JSON to find the mode and dose info
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
-		return DoseModeContinuous
+		return result
 	}
 
-	// Try to find mode in widgets
+	// Try to find mode and doses in widgets
 	if widgets, ok := data["widgets"].([]interface{}); ok {
 		for _, w := range widgets {
 			widget, ok := w.(map[string]interface{})
@@ -447,20 +470,37 @@ func (c *Client) extractModeFromDashboard(body []byte) DoseMode {
 			widgetCode, _ := widget["code"].(string)
 			if widgetCode == "CMBrewByWeightDoses" || widgetCode == "BrewByWeightDoses" {
 				if output, ok := widget["output"].(map[string]interface{}); ok {
+					// Extract mode
 					if mode, ok := output["mode"].(string); ok {
-						return ParseDoseMode(mode)
+						result.mode = ParseDoseMode(mode)
+					}
+
+					// Extract doses object (e.g., {"Dose1": {"dose": 15.00}, "Dose2": {"dose": 34.00}})
+					if doses, ok := output["doses"].(map[string]interface{}); ok {
+						if dose1Data, ok := doses["Dose1"].(map[string]interface{}); ok {
+							if weight, ok := dose1Data["dose"].(float64); ok && weight > 0 {
+								result.dose1 = &DoseInfo{Weight: weight}
+							}
+						}
+						if dose2Data, ok := doses["Dose2"].(map[string]interface{}); ok {
+							if weight, ok := dose2Data["dose"].(float64); ok && weight > 0 {
+								result.dose2 = &DoseInfo{Weight: weight}
+							}
+						}
 					}
 				}
 			}
 		}
 	}
 
-	// Try direct mode field
-	if mode, ok := data["mode"].(string); ok {
-		return ParseDoseMode(mode)
+	// Try direct mode field as fallback
+	if result.mode == DoseModeContinuous {
+		if mode, ok := data["mode"].(string); ok {
+			result.mode = ParseDoseMode(mode)
+		}
 	}
 
-	return DoseModeContinuous
+	return result
 }
 
 func (c *Client) SetMode(mode DoseMode) error {
@@ -494,6 +534,8 @@ func (c *Client) SetMode(mode DoseMode) error {
 func (c *Client) GetStatus() MachineStatus {
 	c.modeLock.RLock()
 	mode := c.currentMode
+	dose1 := c.dose1
+	dose2 := c.dose2
 	c.modeLock.RUnlock()
 
 	return MachineStatus{
@@ -501,6 +543,8 @@ func (c *Client) GetStatus() MachineStatus {
 		Connected: c.token != nil,
 		Serial:    c.serial,
 		Model:     c.model,
+		Dose1:     dose1,
+		Dose2:     dose2,
 	}
 }
 

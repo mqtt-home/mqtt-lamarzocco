@@ -36,11 +36,17 @@ func ParseDoseMode(s string) DoseMode {
 	}
 }
 
+type DoseInfo struct {
+	Weight float64 `json:"weight"` // Weight in grams
+}
+
 type MachineStatus struct {
-	Mode      DoseMode `json:"mode"`
-	Connected bool     `json:"connected"`
-	Serial    string   `json:"serial,omitempty"`
-	Model     string   `json:"model,omitempty"`
+	Mode      DoseMode  `json:"mode"`
+	Connected bool      `json:"connected"`
+	Serial    string    `json:"serial,omitempty"`
+	Model     string    `json:"model,omitempty"`
+	Dose1     *DoseInfo `json:"dose1,omitempty"`
+	Dose2     *DoseInfo `json:"dose2,omitempty"`
 }
 
 type AuthResponse struct {
