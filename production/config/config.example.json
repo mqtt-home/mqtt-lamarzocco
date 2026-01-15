@@ -1,0 +1,38 @@
+{
+  "mqtt": {
+    "url": "tcp://localhost:1883",
+    "topic": "home/lamarzocco",
+    "qos": 2,
+    "retain": true
+  },
+  "lamarzocco": {
+    "username": "your-email@example.com",
+    "password": "your-password",
+    "client_id": "your-client-id",
+    "client_secret": "your-client-secret",
+    "polling_interval": 30
+  },
+  "web": {
+    "enabled": true,
+    "port": 8080
+  },
+  "triggers": [
+    {
+      "topic": "hue/button/hue-dimmer-switch-2",
+      "conditions": [
+        { "selector": "button", "value": 3 },
+        { "selector": "event", "value": "short_release" }
+      ],
+      "action": { "mode": "Dose1" }
+    },
+    {
+      "topic": "hue/button/hue-dimmer-switch-2",
+      "conditions": [
+        { "selector": "button", "value": 2 },
+        { "selector": "event", "value": "short_release" }
+      ],
+      "action": { "mode": "Dose2" }
+    }
+  ],
+  "loglevel": "info"
+}

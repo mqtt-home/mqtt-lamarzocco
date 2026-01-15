@@ -1,0 +1,67 @@
+project_name: mqtt-lamarzocco
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - sh -c "cd web && (command -v pnpm >/dev/null 2>&1 || npm install -g pnpm) && pnpm install --frozen-lockfile && pnpm run build"
+
+builds:
+  - id: mqtt-lamarzocco
+    main: ./main.go
+    binary: mqtt-lamarzocco
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/mqtt-home/mqtt-lamarzocco/version.Version={{.Version}} -X github.com/mqtt-home/mqtt-lamarzocco/version.GitCommit={{.Commit}} -X github.com/mqtt-home/mqtt-lamarzocco/version.BuildTime={{.Date}}
+
+dockers:
+  - image_templates:
+      - "pharndt/mqtt-lamarzocco:{{ .Tag }}-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    extra_files:
+      - web/dist/
+    skip_push: false
+
+  - image_templates:
+      - "pharndt/mqtt-lamarzocco:{{ .Tag }}-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goos: linux
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    extra_files:
+      - web/dist/
+    skip_push: false
+
+docker_manifests:
+  - id: tag
+    name_template: "pharndt/mqtt-lamarzocco:{{ .Tag }}"
+    image_templates:
+      - pharndt/mqtt-lamarzocco:{{ .Tag }}-amd64
+      - pharndt/mqtt-lamarzocco:{{ .Tag }}-arm64
+
+  - id: latest
+    name_template: "pharndt/mqtt-lamarzocco:latest"
+    image_templates:
+      - pharndt/mqtt-lamarzocco:{{ .Tag }}-amd64
+      - pharndt/mqtt-lamarzocco:{{ .Tag }}-arm64
+
+release:
+  disable: false
+  mode: replace
+  draft: false
+  prerelease: auto
+  make_latest: true
+  skip_upload: true
