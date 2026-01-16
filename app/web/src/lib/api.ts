@@ -22,3 +22,28 @@ export async function setMode(mode: DoseMode): Promise<void> {
     throw new Error('Failed to set mode');
   }
 }
+
+export async function setDose(doseId: 'Dose1' | 'Dose2', dose: number): Promise<void> {
+  const response = await fetch(`${API_BASE}/dose`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ doseId, dose }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to set dose');
+  }
+}
+
+export async function startBackFlush(): Promise<void> {
+  const response = await fetch(`${API_BASE}/backflush`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to start back flush');
+  }
+}

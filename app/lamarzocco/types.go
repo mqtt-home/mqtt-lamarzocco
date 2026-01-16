@@ -40,13 +40,26 @@ type DoseInfo struct {
 	Weight float64 `json:"weight"` // Weight in grams
 }
 
+type BoilerInfo struct {
+	Ready           bool `json:"ready"`
+	RemainingSeconds int  `json:"remainingSeconds,omitempty"` // Seconds until ready (0 if ready)
+}
+
+type ScaleInfo struct {
+	Connected    bool `json:"connected"`
+	BatteryLevel int  `json:"batteryLevel,omitempty"` // Battery percentage 0-100
+}
+
 type MachineStatus struct {
-	Mode      DoseMode  `json:"mode"`
-	Connected bool      `json:"connected"`
-	Serial    string    `json:"serial,omitempty"`
-	Model     string    `json:"model,omitempty"`
-	Dose1     *DoseInfo `json:"dose1,omitempty"`
-	Dose2     *DoseInfo `json:"dose2,omitempty"`
+	Mode      DoseMode    `json:"mode"`
+	Connected bool        `json:"connected"`
+	Serial    string      `json:"serial,omitempty"`
+	Model     string      `json:"model,omitempty"`
+	Dose1     *DoseInfo   `json:"dose1,omitempty"`
+	Dose2     *DoseInfo   `json:"dose2,omitempty"`
+	MachineOn bool        `json:"machineOn"`
+	Boiler    *BoilerInfo `json:"boiler,omitempty"`
+	Scale     *ScaleInfo  `json:"scale,omitempty"`
 }
 
 type AuthResponse struct {
@@ -85,4 +98,9 @@ type BrewByWeightOutput struct {
 
 type SetModeRequest struct {
 	Mode string `json:"mode"`
+}
+
+type SetDoseRequest struct {
+	DoseId string  `json:"doseId"` // "Dose1" or "Dose2"
+	Dose   float64 `json:"dose"`   // Weight in grams
 }

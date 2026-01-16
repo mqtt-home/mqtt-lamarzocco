@@ -34,6 +34,11 @@ type SetModeRequest struct {
 	Mode string `json:"mode"`
 }
 
+type SetDoseRequest struct {
+	DoseId string  `json:"doseId"`
+	Dose   float64 `json:"dose"`
+}
+
 func NewWebServer(client *lamarzocco.Client) *WebServer {
 	ws := &WebServer{
 		client:     client,
@@ -86,6 +91,8 @@ func (ws *WebServer) setupRoutes() {
 		r.Get("/health", ws.healthCheck)
 		r.Get("/status", ws.getStatus)
 		r.Post("/mode", ws.setMode)
+		r.Post("/dose", ws.setDose)
+		r.Post("/backflush", ws.startBackFlush)
 		r.Get("/events", ws.handleSSE)
 	})
 
@@ -130,6 +137,50 @@ func (ws *WebServer) setMode(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		if err := ws.client.SetMode(mode); err != nil {
 			logger.Error("Failed to set mode", "error", err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (ws *WebServer) setDose(w http.ResponseWriter, r *http.Request) {
+	var req SetDoseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate doseId
+	if req.DoseId != "Dose1" && req.DoseId != "Dose2" {
+		http.Error(w, "Invalid doseId, must be Dose1 or Dose2", http.StatusBadRequest)
+		return
+	}
+
+	// Validate dose range
+	if req.Dose < 5 || req.Dose > 100 {
+		http.Error(w, "Dose must be between 5 and 100 grams", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Setting dose via web API", "doseId", req.DoseId, "dose", req.Dose)
+
+	go func() {
+		if err := ws.client.SetDose(req.DoseId, req.Dose); err != nil {
+			logger.Error("Failed to set dose", "error", err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (ws *WebServer) startBackFlush(w http.ResponseWriter, r *http.Request) {
+	logger.Info("Starting back flush via web API")
+
+	go func() {
+		if err := ws.client.StartBackFlush(); err != nil {
+			logger.Error("Failed to start back flush", "error", err)
 		}
 	}()
 

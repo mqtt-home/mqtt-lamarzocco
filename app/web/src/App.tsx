@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Coffee, Sun, Moon, Wifi, WifiOff } from 'lucide-react';
+import { Coffee, Sun, Moon, Wifi, WifiOff, Settings, Power, PowerOff, Thermometer, Battery, Scale } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
-import { setMode } from '@/lib/api';
+import { setMode, setDose, startBackFlush } from '@/lib/api';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DoseMode, getModeDisplayName, getDoseWeight } from '@/types/status';
+import { SettingsModal } from '@/components/SettingsModal';
 
 export function App() {
   const { status, isConnected, error, reconnect } = useSSE();
   const { theme, toggleTheme } = useTheme();
   const [isLoading, setIsLoading] = useState<DoseMode | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleSetMode = async (mode: DoseMode) => {
     setIsLoading(mode);
@@ -21,7 +23,13 @@ export function App() {
     }
   };
 
+  const handleSaveDose = async (doseId: 'Dose1' | 'Dose2', weight: number) => {
+    await setDose(doseId, weight);
+  };
+
   const modes: DoseMode[] = ['Dose1', 'Dose2', 'Continuous'];
+
+  const machineOn = status?.machineOn ?? false;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -32,7 +40,7 @@ export function App() {
             <Coffee className="h-8 w-8 text-primary" />
             <h1 className="text-2xl font-bold text-foreground">La Marzocco</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Connection status */}
             <div className="p-2" title={isConnected ? 'Connected' : 'Disconnected'}>
               {isConnected ? (
@@ -41,6 +49,15 @@ export function App() {
                 <WifiOff className="h-5 w-5 text-red-500 cursor-pointer" onClick={reconnect} />
               )}
             </div>
+            {/* Settings button */}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 rounded-lg hover:bg-accent transition-colors"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <Settings className="h-5 w-5 text-foreground" />
+            </button>
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
@@ -69,14 +86,86 @@ export function App() {
           </div>
         )}
 
+        {/* Machine status banner */}
+        {status && !machineOn && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-3">
+            <PowerOff className="h-5 w-5 text-amber-500 flex-shrink-0" />
+            <div>
+              <div className="font-medium text-amber-600 dark:text-amber-400">Machine is off</div>
+              <div className="text-sm text-amber-600/80 dark:text-amber-400/80">
+                Turn on the machine to control brew settings
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Machine info */}
         {status && (
           <div className="mb-6 p-4 bg-card rounded-lg border border-border">
-            <div className="text-sm text-muted-foreground mb-1">
-              {status.model || 'La Marzocco'} {status.serial && `(${status.serial})`}
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm text-muted-foreground">
+                {status.model || 'La Marzocco'} {status.serial && `(${status.serial})`}
+              </div>
+              <div className={`flex items-center gap-1.5 text-xs font-medium ${machineOn ? 'text-green-500' : 'text-muted-foreground'}`}>
+                {machineOn ? (
+                  <>
+                    <Power className="h-3.5 w-3.5" />
+                    <span>On</span>
+                  </>
+                ) : (
+                  <>
+                    <PowerOff className="h-3.5 w-3.5" />
+                    <span>Off</span>
+                  </>
+                )}
+              </div>
             </div>
             <div className="text-lg font-medium text-foreground">
               Brew by Weight: <span className="text-primary">{getModeDisplayName(status.mode)}</span>
+            </div>
+
+            {/* Boiler and Scale status */}
+            <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-4 text-sm">
+              {status.boiler && (
+                <div className="flex items-center gap-2">
+                  <Thermometer className={`h-4 w-4 ${status.boiler.ready ? 'text-green-500' : 'text-amber-500'}`} />
+                  <span className="text-muted-foreground">
+                    {status.boiler.ready ? (
+                      'Boiler ready'
+                    ) : (
+                      <>
+                        Heating
+                        {status.boiler.remainingSeconds !== undefined && status.boiler.remainingSeconds > 0 && (
+                          <span className="ml-1 tabular-nums">
+                            ({Math.ceil(status.boiler.remainingSeconds / 60)}m)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
+              {status.scale && (
+                <div className="flex items-center gap-2">
+                  <Scale className={`h-4 w-4 ${status.scale.connected ? 'text-foreground' : 'text-muted-foreground'}`} />
+                  {status.scale.connected ? (
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <span>Scale</span>
+                      {status.scale.batteryLevel !== undefined && (
+                        <span className="flex items-center gap-1">
+                          <Battery className={`h-3.5 w-3.5 ${
+                            status.scale.batteryLevel > 50 ? 'text-green-500' :
+                            status.scale.batteryLevel > 20 ? 'text-amber-500' : 'text-red-500'
+                          }`} />
+                          <span className="tabular-nums">{status.scale.batteryLevel}%</span>
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Scale disconnected</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -132,6 +221,15 @@ export function App() {
           mqtt-lamarzocco
         </div>
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        status={status}
+        onSaveDose={handleSaveDose}
+        onBackFlush={startBackFlush}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 }

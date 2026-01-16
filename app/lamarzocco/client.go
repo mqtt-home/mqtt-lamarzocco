@@ -33,6 +33,9 @@ type Client struct {
 	currentMode DoseMode
 	dose1       *DoseInfo
 	dose2       *DoseInfo
+	machineOn   bool
+	boiler      *BoilerInfo
+	scale       *ScaleInfo
 	modeLock    sync.RWMutex
 
 	onStatusChange func(MachineStatus)
@@ -421,17 +424,29 @@ func (c *Client) fetchCurrentMode() error {
 	oldMode := c.currentMode
 	oldDose1 := c.dose1
 	oldDose2 := c.dose2
+	oldMachineOn := c.machineOn
+	oldBoiler := c.boiler
+	oldScale := c.scale
 	c.currentMode = data.mode
 	c.dose1 = data.dose1
 	c.dose2 = data.dose2
+	c.machineOn = data.machineOn
+	c.boiler = data.boiler
+	c.scale = data.scale
 	c.modeLock.Unlock()
 
 	// Check if anything changed
-	changed := oldMode != data.mode
+	changed := oldMode != data.mode || oldMachineOn != data.machineOn
 	if !changed && data.dose1 != nil && (oldDose1 == nil || oldDose1.Weight != data.dose1.Weight) {
 		changed = true
 	}
 	if !changed && data.dose2 != nil && (oldDose2 == nil || oldDose2.Weight != data.dose2.Weight) {
+		changed = true
+	}
+	if !changed && data.boiler != nil && (oldBoiler == nil || oldBoiler.Ready != data.boiler.Ready || oldBoiler.RemainingSeconds != data.boiler.RemainingSeconds) {
+		changed = true
+	}
+	if !changed && data.scale != nil && (oldScale == nil || oldScale.Connected != data.scale.Connected || oldScale.BatteryLevel != data.scale.BatteryLevel) {
 		changed = true
 	}
 
@@ -439,14 +454,17 @@ func (c *Client) fetchCurrentMode() error {
 		c.notifyStatusChange()
 	}
 
-	logger.Debug("Current mode", "mode", data.mode, "dose1", data.dose1, "dose2", data.dose2)
+	logger.Debug("Current mode", "mode", data.mode, "dose1", data.dose1, "dose2", data.dose2, "machineOn", data.machineOn, "boiler", data.boiler, "scale", data.scale)
 	return nil
 }
 
 type dashboardData struct {
-	mode  DoseMode
-	dose1 *DoseInfo
-	dose2 *DoseInfo
+	mode      DoseMode
+	dose1     *DoseInfo
+	dose2     *DoseInfo
+	machineOn bool
+	boiler    *BoilerInfo
+	scale     *ScaleInfo
 }
 
 func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
@@ -458,7 +476,12 @@ func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
 		return result
 	}
 
-	// Try to find mode and doses in widgets
+	// Check top-level connected field
+	if connected, ok := data["connected"].(bool); ok && connected {
+		result.machineOn = true
+	}
+
+	// Try to find mode, doses, and machine status in widgets
 	if widgets, ok := data["widgets"].([]interface{}); ok {
 		for _, w := range widgets {
 			widget, ok := w.(map[string]interface{})
@@ -468,6 +491,17 @@ func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
 
 			// Widget uses "code" field, not "type"
 			widgetCode, _ := widget["code"].(string)
+
+			// Extract machine power status from CMMachineStatus widget
+			if widgetCode == "CMMachineStatus" {
+				if output, ok := widget["output"].(map[string]interface{}); ok {
+					if status, ok := output["status"].(string); ok {
+						result.machineOn = status == "PoweredOn"
+					}
+				}
+			}
+
+			// Extract brew by weight mode and doses
 			if widgetCode == "CMBrewByWeightDoses" || widgetCode == "BrewByWeightDoses" {
 				if output, ok := widget["output"].(map[string]interface{}); ok {
 					// Extract mode
@@ -490,6 +524,45 @@ func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
 					}
 				}
 			}
+
+			// Extract boiler status from CMCoffeeBoiler widget
+			if widgetCode == "CMCoffeeBoiler" || widgetCode == "CMBoilerStatus" {
+				if output, ok := widget["output"].(map[string]interface{}); ok {
+					boiler := &BoilerInfo{}
+					// Check status string (Ready, Heating, etc.)
+					if status, ok := output["status"].(string); ok {
+						boiler.Ready = status == "Ready"
+					}
+					// Get remaining seconds until ready (if heating)
+					if remaining, ok := output["remainingSeconds"].(float64); ok {
+						boiler.RemainingSeconds = int(remaining)
+					}
+					if remaining, ok := output["readyStartTime"].(float64); ok && remaining > 0 {
+						// Calculate remaining time from ready start time
+						now := float64(time.Now().UnixMilli())
+						if remaining > now {
+							boiler.RemainingSeconds = int((remaining - now) / 1000)
+						}
+					}
+					result.boiler = boiler
+				}
+			}
+
+			// Extract scale info from ThingScale widget
+			if widgetCode == "ThingScale" {
+				if output, ok := widget["output"].(map[string]interface{}); ok {
+					scale := &ScaleInfo{}
+					// Check connected status
+					if connected, ok := output["connected"].(bool); ok {
+						scale.Connected = connected
+					}
+					// Get battery level
+					if battery, ok := output["batteryLevel"].(float64); ok {
+						scale.BatteryLevel = int(battery)
+					}
+					result.scale = scale
+				}
+			}
 		}
 	}
 
@@ -504,7 +577,7 @@ func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
 }
 
 func (c *Client) SetMode(mode DoseMode) error {
-	url := fmt.Sprintf("%s/things/%s/command/CoffeeMachineBrewByWeightChangeMode?commandType=CustomerAppThingCommandType", BaseURL, c.serial)
+	url := fmt.Sprintf("%s/things/%s/command/CoffeeMachineBrewByWeightChangeMode", BaseURL, c.serial)
 
 	payload := SetModeRequest{
 		Mode: string(mode),
@@ -531,11 +604,96 @@ func (c *Client) SetMode(mode DoseMode) error {
 	return nil
 }
 
+func (c *Client) SetDose(doseId string, weight float64) error {
+	// Use CoffeeMachineBrewByWeightSettingDoses command (from pylamarzocco)
+	url := fmt.Sprintf("%s/things/%s/command/CoffeeMachineBrewByWeightSettingDoses", BaseURL, c.serial)
+
+	// Get current dose values
+	c.modeLock.RLock()
+	dose1Val := 0.0
+	dose2Val := 0.0
+	if c.dose1 != nil {
+		dose1Val = c.dose1.Weight
+	}
+	if c.dose2 != nil {
+		dose2Val = c.dose2.Weight
+	}
+	c.modeLock.RUnlock()
+
+	// Update the target dose, rounded to 1 decimal
+	roundedWeight := float64(int(weight*10)) / 10
+	if doseId == "Dose1" {
+		dose1Val = roundedWeight
+	} else if doseId == "Dose2" {
+		dose2Val = roundedWeight
+	}
+
+	// Payload requires both doses: {"doses": {"Dose1": 15.0, "Dose2": 34.0}}
+	payload := map[string]interface{}{
+		"doses": map[string]interface{}{
+			"Dose1": dose1Val,
+			"Dose2": dose2Val,
+		},
+	}
+
+	resp, err := c.doAuthenticatedRequest("POST", url, payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to set dose: %d - %s", resp.StatusCode, string(body))
+	}
+
+	// Update local state
+	c.modeLock.Lock()
+	if doseId == "Dose1" {
+		c.dose1 = &DoseInfo{Weight: roundedWeight}
+	} else if doseId == "Dose2" {
+		c.dose2 = &DoseInfo{Weight: roundedWeight}
+	}
+	c.modeLock.Unlock()
+
+	c.notifyStatusChange()
+
+	logger.Info("Dose set successfully", "doseId", doseId, "weight", weight)
+	return nil
+}
+
+func (c *Client) StartBackFlush() error {
+	// Use CoffeeMachineBackFlushStartCleaning command (from pylamarzocco)
+	url := fmt.Sprintf("%s/things/%s/command/CoffeeMachineBackFlushStartCleaning", BaseURL, c.serial)
+
+	// Payload format: {"enabled": true}
+	payload := map[string]interface{}{
+		"enabled": true,
+	}
+
+	resp, err := c.doAuthenticatedRequest("POST", url, payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to start back flush: %d - %s", resp.StatusCode, string(body))
+	}
+
+	logger.Info("Back flush started successfully")
+	return nil
+}
+
 func (c *Client) GetStatus() MachineStatus {
 	c.modeLock.RLock()
 	mode := c.currentMode
 	dose1 := c.dose1
 	dose2 := c.dose2
+	machineOn := c.machineOn
+	boiler := c.boiler
+	scale := c.scale
 	c.modeLock.RUnlock()
 
 	return MachineStatus{
@@ -545,6 +703,9 @@ func (c *Client) GetStatus() MachineStatus {
 		Model:     c.model,
 		Dose1:     dose1,
 		Dose2:     dose2,
+		MachineOn: machineOn,
+		Boiler:    boiler,
+		Scale:     scale,
 	}
 }
 

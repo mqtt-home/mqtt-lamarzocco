@@ -48,9 +48,6 @@ func subscribeToCommands() {
 			return
 		}
 
-		mode := cmd.GetDoseMode()
-		logger.Info("Setting dose mode", "mode", mode)
-
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -58,8 +55,37 @@ func subscribeToCommands() {
 				}
 			}()
 
-			if err := client.SetMode(mode); err != nil {
-				logger.Error("Failed to set mode", "error", err)
+			// Handle dose1 command
+			if cmd.HasDose1() {
+				logger.Info("Setting dose1 weight", "weight", cmd.GetDose1())
+				if err := client.SetDose("Dose1", cmd.GetDose1()); err != nil {
+					logger.Error("Failed to set dose1", "error", err)
+				}
+			}
+
+			// Handle dose2 command
+			if cmd.HasDose2() {
+				logger.Info("Setting dose2 weight", "weight", cmd.GetDose2())
+				if err := client.SetDose("Dose2", cmd.GetDose2()); err != nil {
+					logger.Error("Failed to set dose2", "error", err)
+				}
+			}
+
+			// Handle mode command
+			if cmd.HasMode() {
+				mode := cmd.GetDoseMode()
+				logger.Info("Setting dose mode", "mode", mode)
+				if err := client.SetMode(mode); err != nil {
+					logger.Error("Failed to set mode", "error", err)
+				}
+			}
+
+			// Handle back flush command
+			if cmd.HasBackFlush() {
+				logger.Info("Starting back flush")
+				if err := client.StartBackFlush(); err != nil {
+					logger.Error("Failed to start back flush", "error", err)
+				}
 			}
 		}()
 	})
