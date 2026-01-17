@@ -41,8 +41,15 @@ type DoseInfo struct {
 }
 
 type BoilerInfo struct {
-	Ready           bool `json:"ready"`
-	RemainingSeconds int  `json:"remainingSeconds,omitempty"` // Seconds until ready (0 if ready)
+	Ready            bool    `json:"ready"`
+	RemainingSeconds int     `json:"remainingSeconds,omitempty"` // Seconds until ready (0 if ready)
+	Temperature      float64 `json:"temperature,omitempty"`      // Current target temperature (coffee)
+	Level            string  `json:"level,omitempty"`            // Target level (steam): Level1, Level2, etc.
+}
+
+type BoilersInfo struct {
+	Coffee *BoilerInfo `json:"coffee,omitempty"`
+	Steam  *BoilerInfo `json:"steam,omitempty"`
 }
 
 type ScaleInfo struct {
@@ -51,15 +58,15 @@ type ScaleInfo struct {
 }
 
 type MachineStatus struct {
-	Mode      DoseMode    `json:"mode"`
-	Connected bool        `json:"connected"`
-	Serial    string      `json:"serial,omitempty"`
-	Model     string      `json:"model,omitempty"`
-	Dose1     *DoseInfo   `json:"dose1,omitempty"`
-	Dose2     *DoseInfo   `json:"dose2,omitempty"`
-	MachineOn bool        `json:"machineOn"`
-	Boiler    *BoilerInfo `json:"boiler,omitempty"`
-	Scale     *ScaleInfo  `json:"scale,omitempty"`
+	Mode      DoseMode     `json:"mode"`
+	Connected bool         `json:"connected"`
+	Serial    string       `json:"serial,omitempty"`
+	Model     string       `json:"model,omitempty"`
+	Dose1     *DoseInfo    `json:"dose1,omitempty"`
+	Dose2     *DoseInfo    `json:"dose2,omitempty"`
+	MachineOn bool         `json:"machineOn"`
+	Boilers   *BoilersInfo `json:"boilers,omitempty"`
+	Scale     *ScaleInfo   `json:"scale,omitempty"`
 }
 
 type AuthResponse struct {

@@ -34,7 +34,7 @@ type Client struct {
 	dose1       *DoseInfo
 	dose2       *DoseInfo
 	machineOn   bool
-	boiler      *BoilerInfo
+	boilers     *BoilersInfo
 	scale       *ScaleInfo
 	modeLock    sync.RWMutex
 
@@ -425,13 +425,13 @@ func (c *Client) fetchCurrentMode() error {
 	oldDose1 := c.dose1
 	oldDose2 := c.dose2
 	oldMachineOn := c.machineOn
-	oldBoiler := c.boiler
+	oldBoilers := c.boilers
 	oldScale := c.scale
 	c.currentMode = data.mode
 	c.dose1 = data.dose1
 	c.dose2 = data.dose2
 	c.machineOn = data.machineOn
-	c.boiler = data.boiler
+	c.boilers = data.boilers
 	c.scale = data.scale
 	c.modeLock.Unlock()
 
@@ -443,8 +443,17 @@ func (c *Client) fetchCurrentMode() error {
 	if !changed && data.dose2 != nil && (oldDose2 == nil || oldDose2.Weight != data.dose2.Weight) {
 		changed = true
 	}
-	if !changed && data.boiler != nil && (oldBoiler == nil || oldBoiler.Ready != data.boiler.Ready || oldBoiler.RemainingSeconds != data.boiler.RemainingSeconds) {
-		changed = true
+	if !changed && data.boilers != nil {
+		if oldBoilers == nil {
+			changed = true
+		} else {
+			if data.boilers.Coffee != nil && (oldBoilers.Coffee == nil || oldBoilers.Coffee.Ready != data.boilers.Coffee.Ready) {
+				changed = true
+			}
+			if data.boilers.Steam != nil && (oldBoilers.Steam == nil || oldBoilers.Steam.Ready != data.boilers.Steam.Ready) {
+				changed = true
+			}
+		}
 	}
 	if !changed && data.scale != nil && (oldScale == nil || oldScale.Connected != data.scale.Connected || oldScale.BatteryLevel != data.scale.BatteryLevel) {
 		changed = true
@@ -454,7 +463,7 @@ func (c *Client) fetchCurrentMode() error {
 		c.notifyStatusChange()
 	}
 
-	logger.Debug("Current mode", "mode", data.mode, "dose1", data.dose1, "dose2", data.dose2, "machineOn", data.machineOn, "boiler", data.boiler, "scale", data.scale)
+	logger.Debug("Current mode", "mode", data.mode, "dose1", data.dose1, "dose2", data.dose2, "machineOn", data.machineOn, "boilers", data.boilers, "scale", data.scale)
 	return nil
 }
 
@@ -463,7 +472,7 @@ type dashboardData struct {
 	dose1     *DoseInfo
 	dose2     *DoseInfo
 	machineOn bool
-	boiler    *BoilerInfo
+	boilers   *BoilersInfo
 	scale     *ScaleInfo
 }
 
@@ -525,26 +534,61 @@ func (c *Client) extractDataFromDashboard(body []byte) dashboardData {
 				}
 			}
 
-			// Extract boiler status from CMCoffeeBoiler widget
-			if widgetCode == "CMCoffeeBoiler" || widgetCode == "CMBoilerStatus" {
+			// Extract coffee boiler status from CMCoffeeBoiler widget
+			if widgetCode == "CMCoffeeBoiler" {
 				if output, ok := widget["output"].(map[string]interface{}); ok {
 					boiler := &BoilerInfo{}
-					// Check status string (Ready, Heating, etc.)
+					// Check status string (Ready, HeatingUp, etc.)
 					if status, ok := output["status"].(string); ok {
 						boiler.Ready = status == "Ready"
 					}
-					// Get remaining seconds until ready (if heating)
-					if remaining, ok := output["remainingSeconds"].(float64); ok {
-						boiler.RemainingSeconds = int(remaining)
+					// Get target temperature
+					if temp, ok := output["targetTemperature"].(float64); ok {
+						boiler.Temperature = temp
 					}
-					if remaining, ok := output["readyStartTime"].(float64); ok && remaining > 0 {
-						// Calculate remaining time from ready start time
+					// Calculate remaining seconds from readyStartTime (future timestamp in ms)
+					if readyTime, ok := output["readyStartTime"].(float64); ok && readyTime > 0 {
 						now := float64(time.Now().UnixMilli())
-						if remaining > now {
-							boiler.RemainingSeconds = int((remaining - now) / 1000)
+						if readyTime > now {
+							boiler.RemainingSeconds = int((readyTime - now) / 1000)
+							logger.Debug("Coffee boiler heating", "readyStartTime", readyTime, "now", now, "remainingSeconds", boiler.RemainingSeconds)
 						}
 					}
-					result.boiler = boiler
+					if result.boilers == nil {
+						result.boilers = &BoilersInfo{}
+					}
+					result.boilers.Coffee = boiler
+				}
+			}
+
+			// Extract steam boiler status from CMSteamBoilerLevel widget
+			if widgetCode == "CMSteamBoilerLevel" || widgetCode == "CMSteamBoiler" {
+				if output, ok := widget["output"].(map[string]interface{}); ok {
+					boiler := &BoilerInfo{}
+					// Check status string (Ready, HeatingUp, etc.)
+					if status, ok := output["status"].(string); ok {
+						boiler.Ready = status == "Ready"
+					}
+					// Check if enabled
+					if enabled, ok := output["enabled"].(bool); ok && !enabled {
+						boiler.Ready = false
+					}
+					// Get target level (Level1, Level2, etc.)
+					if level, ok := output["targetLevel"].(string); ok {
+						boiler.Level = level
+					}
+					// Calculate remaining seconds from readyStartTime (future timestamp in ms)
+					if readyTime, ok := output["readyStartTime"].(float64); ok && readyTime > 0 {
+						now := float64(time.Now().UnixMilli())
+						if readyTime > now {
+							boiler.RemainingSeconds = int((readyTime - now) / 1000)
+							logger.Debug("Steam boiler heating", "readyStartTime", readyTime, "now", now, "remainingSeconds", boiler.RemainingSeconds)
+						}
+					}
+					if result.boilers == nil {
+						result.boilers = &BoilersInfo{}
+					}
+					result.boilers.Steam = boiler
 				}
 			}
 
@@ -692,7 +736,7 @@ func (c *Client) GetStatus() MachineStatus {
 	dose1 := c.dose1
 	dose2 := c.dose2
 	machineOn := c.machineOn
-	boiler := c.boiler
+	boilers := c.boilers
 	scale := c.scale
 	c.modeLock.RUnlock()
 
@@ -704,7 +748,7 @@ func (c *Client) GetStatus() MachineStatus {
 		Dose1:     dose1,
 		Dose2:     dose2,
 		MachineOn: machineOn,
-		Boiler:    boiler,
+		Boilers:   boilers,
 		Scale:     scale,
 	}
 }

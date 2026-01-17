@@ -124,21 +124,42 @@ export function App() {
               Brew by Weight: <span className="text-primary">{getModeDisplayName(status.mode)}</span>
             </div>
 
-            {/* Boiler and Scale status */}
+            {/* Boilers and Scale status */}
             <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-4 text-sm">
-              {status.boiler && (
+              {status.boilers?.coffee && (
                 <div className="flex items-center gap-2">
-                  <Thermometer className={`h-4 w-4 ${status.boiler.ready ? 'text-green-500' : 'text-amber-500'}`} />
+                  <Thermometer className={`h-4 w-4 ${status.boilers.coffee.ready ? 'text-green-500' : 'text-amber-500'}`} />
                   <span className="text-muted-foreground">
-                    {status.boiler.ready ? (
-                      'Boiler ready'
-                    ) : (
+                    Coffee
+                    {status.boilers.coffee.temperature ? ` ${status.boilers.coffee.temperature}°C` : ''}
+                    {!status.boilers.coffee.ready && (
                       <>
-                        Heating
-                        {status.boiler.remainingSeconds !== undefined && status.boiler.remainingSeconds > 0 && (
+                        {status.boilers.coffee.remainingSeconds !== undefined && status.boilers.coffee.remainingSeconds > 0 ? (
                           <span className="ml-1 tabular-nums">
-                            ({Math.ceil(status.boiler.remainingSeconds / 60)}m)
+                            ({Math.ceil(status.boilers.coffee.remainingSeconds / 60)}m)
                           </span>
+                        ) : (
+                          <span className="ml-1">(heating)</span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
+              {status.boilers?.steam && (
+                <div className="flex items-center gap-2">
+                  <Thermometer className={`h-4 w-4 ${status.boilers.steam.ready ? 'text-green-500' : 'text-amber-500'}`} />
+                  <span className="text-muted-foreground">
+                    Steam
+                    {status.boilers.steam.level && ` ${status.boilers.steam.level.replace('Level', 'L')}`}
+                    {!status.boilers.steam.ready && (
+                      <>
+                        {status.boilers.steam.remainingSeconds !== undefined && status.boilers.steam.remainingSeconds > 0 ? (
+                          <span className="ml-1 tabular-nums">
+                            ({Math.ceil(status.boilers.steam.remainingSeconds / 60)}m)
+                          </span>
+                        ) : (
+                          <span className="ml-1">(heating)</span>
                         )}
                       </>
                     )}

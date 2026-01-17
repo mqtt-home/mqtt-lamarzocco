@@ -7,6 +7,13 @@ export interface DoseInfo {
 export interface BoilerInfo {
   ready: boolean;
   remainingSeconds?: number; // Seconds until ready (0 if ready)
+  temperature?: number; // Target temperature (coffee)
+  level?: string; // Target level (steam): Level1, Level2, etc.
+}
+
+export interface BoilersInfo {
+  coffee?: BoilerInfo;
+  steam?: BoilerInfo;
 }
 
 export interface ScaleInfo {
@@ -22,7 +29,7 @@ export interface MachineStatus {
   dose1?: DoseInfo;
   dose2?: DoseInfo;
   machineOn?: boolean;
-  boiler?: BoilerInfo;
+  boilers?: BoilersInfo;
   scale?: ScaleInfo;
 }
 
