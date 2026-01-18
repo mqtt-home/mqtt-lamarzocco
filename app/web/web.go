@@ -92,6 +92,7 @@ func (ws *WebServer) setupRoutes() {
 		r.Get("/status", ws.getStatus)
 		r.Post("/mode", ws.setMode)
 		r.Post("/dose", ws.setDose)
+		r.Post("/power", ws.setPower)
 		r.Post("/backflush", ws.startBackFlush)
 		r.Get("/events", ws.handleSSE)
 	})
@@ -168,6 +169,29 @@ func (ws *WebServer) setDose(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		if err := ws.client.SetDose(req.DoseId, req.Dose); err != nil {
 			logger.Error("Failed to set dose", "error", err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+type SetPowerRequest struct {
+	On bool `json:"on"`
+}
+
+func (ws *WebServer) setPower(w http.ResponseWriter, r *http.Request) {
+	var req SetPowerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	logger.Info("Setting power via web API", "on", req.On)
+
+	go func() {
+		if err := ws.client.SetPower(req.On); err != nil {
+			logger.Error("Failed to set power", "error", err)
 		}
 	}()
 

@@ -30,13 +30,14 @@ type Client struct {
 	serial string
 	model  string
 
-	currentMode DoseMode
-	dose1       *DoseInfo
-	dose2       *DoseInfo
-	machineOn   bool
-	boilers     *BoilersInfo
-	scale       *ScaleInfo
-	modeLock    sync.RWMutex
+	currentMode       DoseMode
+	dose1             *DoseInfo
+	dose2             *DoseInfo
+	machineOn         bool
+	boilers           *BoilersInfo
+	scale             *ScaleInfo
+	powerCommandTime  time.Time // Time of last power command (to ignore polling for 10s)
+	modeLock          sync.RWMutex
 
 	onStatusChange func(MachineStatus)
 }
@@ -427,10 +428,19 @@ func (c *Client) fetchCurrentMode() error {
 	oldMachineOn := c.machineOn
 	oldBoilers := c.boilers
 	oldScale := c.scale
+
+	// Check if we should ignore machineOn from API (within 10s of power command)
+	ignoreMachineOn := time.Since(c.powerCommandTime) < 10*time.Second
+
 	c.currentMode = data.mode
 	c.dose1 = data.dose1
 	c.dose2 = data.dose2
-	c.machineOn = data.machineOn
+	if !ignoreMachineOn {
+		c.machineOn = data.machineOn
+	} else {
+		// Keep the optimistic value, but use it for change detection
+		data.machineOn = c.machineOn
+	}
 	c.boilers = data.boilers
 	c.scale = data.scale
 	c.modeLock.Unlock()
@@ -703,6 +713,52 @@ func (c *Client) SetDose(doseId string, weight float64) error {
 	c.notifyStatusChange()
 
 	logger.Info("Dose set successfully", "doseId", doseId, "weight", weight)
+	return nil
+}
+
+func (c *Client) SetPower(on bool) error {
+	url := fmt.Sprintf("%s/things/%s/command/CoffeeMachineChangeMode", BaseURL, c.serial)
+
+	mode := "StandBy"
+	if on {
+		mode = "BrewingMode"
+	}
+
+	payload := map[string]interface{}{
+		"mode": mode,
+	}
+
+	resp, err := c.doAuthenticatedRequest("POST", url, payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to set power: %d - %s", resp.StatusCode, string(body))
+	}
+
+	// Update local state optimistically and set power command time
+	c.modeLock.Lock()
+	c.machineOn = on
+	c.powerCommandTime = time.Now()
+	c.modeLock.Unlock()
+	c.notifyStatusChange()
+
+	logger.Info("Power set successfully", "on", on)
+
+	// Refresh status from dashboard multiple times to catch the actual state
+	go func() {
+		delays := []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+		for _, delay := range delays {
+			time.Sleep(delay)
+			if err := c.fetchCurrentMode(); err != nil {
+				logger.Error("Failed to refresh status after power change", "error", err)
+			}
+		}
+	}()
+
 	return nil
 }
 

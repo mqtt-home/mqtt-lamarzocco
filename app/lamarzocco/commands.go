@@ -10,6 +10,7 @@ type Command struct {
 	Dose1     *float64 `json:"dose1,omitempty"`     // Weight in grams for Dose1
 	Dose2     *float64 `json:"dose2,omitempty"`     // Weight in grams for Dose2
 	BackFlush *bool    `json:"backflush,omitempty"` // Start back flush cycle
+	Power     *bool    `json:"power,omitempty"`     // Turn machine on (true) or standby (false)
 }
 
 func ParseCommand(payload []byte) (*Command, error) {
@@ -19,8 +20,8 @@ func ParseCommand(payload []byte) (*Command, error) {
 	}
 
 	// At least one field must be set
-	if cmd.Mode == "" && cmd.Dose1 == nil && cmd.Dose2 == nil && cmd.BackFlush == nil {
-		return nil, fmt.Errorf("mode, dose1, dose2, or backflush is required")
+	if cmd.Mode == "" && cmd.Dose1 == nil && cmd.Dose2 == nil && cmd.BackFlush == nil && cmd.Power == nil {
+		return nil, fmt.Errorf("mode, dose1, dose2, backflush, or power is required")
 	}
 
 	return &cmd, nil
@@ -58,4 +59,15 @@ func (c *Command) GetDose2() float64 {
 
 func (c *Command) HasBackFlush() bool {
 	return c.BackFlush != nil && *c.BackFlush
+}
+
+func (c *Command) HasPower() bool {
+	return c.Power != nil
+}
+
+func (c *Command) GetPower() bool {
+	if c.Power != nil {
+		return *c.Power
+	}
+	return false
 }

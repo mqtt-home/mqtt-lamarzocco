@@ -47,3 +47,16 @@ export async function startBackFlush(): Promise<void> {
     throw new Error('Failed to start back flush');
   }
 }
+
+export async function setPower(on: boolean): Promise<void> {
+  const response = await fetch(`${API_BASE}/power`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ on }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to set power');
+  }
+}

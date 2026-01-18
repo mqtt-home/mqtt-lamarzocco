@@ -87,6 +87,15 @@ func subscribeToCommands() {
 					logger.Error("Failed to start back flush", "error", err)
 				}
 			}
+
+			// Handle power command
+			if cmd.HasPower() {
+				on := cmd.GetPower()
+				logger.Info("Setting power", "on", on)
+				if err := client.SetPower(on); err != nil {
+					logger.Error("Failed to set power", "error", err)
+				}
+			}
 		}()
 	})
 }

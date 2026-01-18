@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Coffee, Sun, Moon, Wifi, WifiOff, Settings, Power, PowerOff, Thermometer, Battery, Scale } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
-import { setMode, setDose, startBackFlush } from '@/lib/api';
+import { setMode, setDose, startBackFlush, setPower } from '@/lib/api';
 import { useTheme } from '@/contexts/ThemeContext';
 import { DoseMode, getModeDisplayName, getDoseWeight } from '@/types/status';
 import { SettingsModal } from '@/components/SettingsModal';
@@ -11,6 +11,7 @@ export function App() {
   const { theme, toggleTheme } = useTheme();
   const [isLoading, setIsLoading] = useState<DoseMode | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [powerLoading, setPowerLoading] = useState(false);
 
   const handleSetMode = async (mode: DoseMode) => {
     setIsLoading(mode);
@@ -25,6 +26,18 @@ export function App() {
 
   const handleSaveDose = async (doseId: 'Dose1' | 'Dose2', weight: number) => {
     await setDose(doseId, weight);
+  };
+
+  const handleTogglePower = async () => {
+    if (powerLoading || !status) return;
+    setPowerLoading(true);
+    try {
+      await setPower(!machineOn);
+    } catch (err) {
+      console.error('Failed to toggle power:', err);
+    } finally {
+      setTimeout(() => setPowerLoading(false), 1000);
+    }
   };
 
   const modes: DoseMode[] = ['Dose1', 'Dose2', 'Continuous'];
@@ -106,19 +119,28 @@ export function App() {
               <div className="text-sm text-muted-foreground">
                 {status.model || 'La Marzocco'} {status.serial && `(${status.serial})`}
               </div>
-              <div className={`flex items-center gap-1.5 text-xs font-medium ${machineOn ? 'text-green-500' : 'text-muted-foreground'}`}>
+              <button
+                onClick={handleTogglePower}
+                disabled={powerLoading}
+                className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded transition-colors ${
+                  machineOn
+                    ? 'text-green-500 hover:bg-green-500/10'
+                    : 'text-muted-foreground hover:bg-accent'
+                } ${powerLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                title={machineOn ? 'Click to turn off' : 'Click to turn on'}
+              >
                 {machineOn ? (
                   <>
                     <Power className="h-3.5 w-3.5" />
-                    <span>On</span>
+                    <span>{powerLoading ? '...' : 'On'}</span>
                   </>
                 ) : (
                   <>
                     <PowerOff className="h-3.5 w-3.5" />
-                    <span>Off</span>
+                    <span>{powerLoading ? '...' : 'Off'}</span>
                   </>
                 )}
-              </div>
+              </button>
             </div>
             <div className="text-lg font-medium text-foreground">
               Brew by Weight: <span className="text-primary">{getModeDisplayName(status.mode)}</span>
