@@ -161,23 +161,49 @@ func subscribeToTriggers() {
 				}
 
 				if allMatch {
-					mode := lamarzocco.ParseDoseMode(trigger.Action.Mode)
-					logger.Info("Trigger matched, setting dose mode",
-						"trigger_index", i,
-						"topic", msgTopic,
-						"mode", mode)
+					logger.Info("Trigger matched", "trigger_index", i, "topic", msgTopic)
 
-					go func(m lamarzocco.DoseMode) {
+					go func(action config.TriggerAction) {
 						defer func() {
 							if r := recover(); r != nil {
 								logger.Error("Panic in trigger processing", "panic", r)
 							}
 						}()
 
-						if err := client.SetMode(m); err != nil {
-							logger.Error("Failed to set mode from trigger", "error", err)
+						// Handle power action
+						if action.Power != "" {
+							switch action.Power {
+							case "on":
+								logger.Info("Trigger setting power on")
+								if err := client.SetPower(true); err != nil {
+									logger.Error("Failed to set power on from trigger", "error", err)
+								}
+							case "off":
+								logger.Info("Trigger setting power off")
+								if err := client.SetPower(false); err != nil {
+									logger.Error("Failed to set power off from trigger", "error", err)
+								}
+							case "toggle":
+								currentStatus := client.GetStatus()
+								newPower := !currentStatus.MachineOn
+								logger.Info("Trigger toggling power", "currentOn", currentStatus.MachineOn, "newOn", newPower)
+								if err := client.SetPower(newPower); err != nil {
+									logger.Error("Failed to toggle power from trigger", "error", err)
+								}
+							default:
+								logger.Error("Unknown power action", "action", action.Power)
+							}
 						}
-					}(mode)
+
+						// Handle mode action
+						if action.Mode != "" {
+							mode := lamarzocco.ParseDoseMode(action.Mode)
+							logger.Info("Trigger setting dose mode", "mode", mode)
+							if err := client.SetMode(mode); err != nil {
+								logger.Error("Failed to set mode from trigger", "error", err)
+							}
+						}
+					}(trigger.Action)
 
 					// Stop after first matching trigger
 					return

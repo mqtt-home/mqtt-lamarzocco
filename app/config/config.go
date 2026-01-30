@@ -16,7 +16,8 @@ type TriggerCondition struct {
 }
 
 type TriggerAction struct {
-	Mode string `json:"mode"` // Dose mode to set
+	Mode  string `json:"mode,omitempty"`  // Dose mode to set
+	Power string `json:"power,omitempty"` // Power action: "on", "off", or "toggle"
 }
 
 type Trigger struct {
