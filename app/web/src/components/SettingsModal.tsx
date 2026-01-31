@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Droplets } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Droplets, Check } from 'lucide-react';
 import { MachineStatus } from '@/types/status';
 
 interface SettingsModalProps {
@@ -12,19 +12,23 @@ interface SettingsModalProps {
 
 export function SettingsModal({ isOpen, status, onSaveDose, onBackFlush, onClose }: SettingsModalProps) {
   const machineOn = status?.machineOn ?? false;
-  const [dose1, setDose1] = useState(status?.dose1?.weight ?? 0);
-  const [dose2, setDose2] = useState(status?.dose2?.weight ?? 0);
+  const [dose1, setDose1] = useState<string>('');
+  const [dose2, setDose2] = useState<string>('');
   const [saving, setSaving] = useState<'dose1' | 'dose2' | null>(null);
+  const [saved, setSaved] = useState<'dose1' | 'dose2' | null>(null);
   const [backflushing, setBackflushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const wasOpen = useRef(false);
 
+  // Only sync values from server when modal opens, not on every status update
   useEffect(() => {
-    if (status) {
-      setDose1(status.dose1?.weight ?? 0);
-      setDose2(status.dose2?.weight ?? 0);
+    if (isOpen && !wasOpen.current && status) {
+      setDose1(String(status.dose1?.weight ?? ''));
+      setDose2(String(status.dose2?.weight ?? ''));
+      setError(null);
     }
-    setError(null);
-  }, [status, isOpen]);
+    wasOpen.current = isOpen;
+  }, [isOpen, status]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -38,18 +42,22 @@ export function SettingsModal({ isOpen, status, onSaveDose, onBackFlush, onClose
   }, [isOpen, onClose]);
 
   const handleSave = async (doseId: 'Dose1' | 'Dose2') => {
-    const weight = doseId === 'Dose1' ? dose1 : dose2;
+    const weightStr = doseId === 'Dose1' ? dose1 : dose2;
+    const weight = parseFloat(weightStr);
 
-    if (weight < 5 || weight > 100) {
+    if (isNaN(weight) || weight < 5 || weight > 100) {
       setError('Weight must be between 5 and 100 grams');
       return;
     }
 
-    setSaving(doseId === 'Dose1' ? 'dose1' : 'dose2');
+    const doseKey = doseId === 'Dose1' ? 'dose1' : 'dose2';
+    setSaving(doseKey);
     setError(null);
 
     try {
       await onSaveDose(doseId, weight);
+      setSaved(doseKey);
+      setTimeout(() => setSaved(null), 1500);
     } catch (err) {
       setError('Failed to save dose weight');
     } finally {
@@ -113,16 +121,20 @@ export function SettingsModal({ isOpen, status, onSaveDose, onBackFlush, onClose
                 max={100}
                 step={0.1}
                 value={dose1}
-                onChange={(e) => setDose1(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setDose1(e.target.value)}
                 className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
               <span className="text-sm text-muted-foreground">g</span>
               <button
                 onClick={() => handleSave('Dose1')}
                 disabled={saving === 'dose1'}
-                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className={`w-14 h-9 rounded-lg text-sm text-primary-foreground transition-[background-color] disabled:opacity-50 flex items-center justify-center ${
+                  saved === 'dose1'
+                    ? 'bg-green-500'
+                    : 'bg-primary hover:bg-primary/90'
+                }`}
               >
-                {saving === 'dose1' ? '...' : 'Save'}
+                {saving === 'dose1' ? '...' : saved === 'dose1' ? <Check className="h-4 w-4" /> : 'Save'}
               </button>
             </div>
           </div>
@@ -140,16 +152,20 @@ export function SettingsModal({ isOpen, status, onSaveDose, onBackFlush, onClose
                 max={100}
                 step={0.1}
                 value={dose2}
-                onChange={(e) => setDose2(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setDose2(e.target.value)}
                 className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
               <span className="text-sm text-muted-foreground">g</span>
               <button
                 onClick={() => handleSave('Dose2')}
                 disabled={saving === 'dose2'}
-                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className={`w-14 h-9 rounded-lg text-sm text-primary-foreground transition-[background-color] disabled:opacity-50 flex items-center justify-center ${
+                  saved === 'dose2'
+                    ? 'bg-green-500'
+                    : 'bg-primary hover:bg-primary/90'
+                }`}
               >
-                {saving === 'dose2' ? '...' : 'Save'}
+                {saving === 'dose2' ? '...' : saved === 'dose2' ? <Check className="h-4 w-4" /> : 'Save'}
               </button>
             </div>
           </div>
