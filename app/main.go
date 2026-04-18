@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"expvar"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -25,7 +28,7 @@ func publishStatus(status lamarzocco.MachineStatus) {
 
 	data, err := json.Marshal(status)
 	if err != nil {
-		logger.Error("Failed to marshal status", err)
+		logger.Error("Failed to marshal status", "error", err)
 		return
 	}
 
@@ -133,8 +136,8 @@ func subscribeToTriggers() {
 
 	// Subscribe to each unique topic
 	for topic, triggers := range triggersByTopic {
-		subscribeTopic := topic    // capture topic for closure
-		topicTriggers := triggers  // capture triggers for closure
+		subscribeTopic := topic   // capture topic for closure
+		topicTriggers := triggers // capture triggers for closure
 		logger.Info("Subscribing to trigger topic", "topic", subscribeTopic, "triggers", len(topicTriggers))
 
 		mqtt.Subscribe(subscribeTopic, func(msgTopic string, payload []byte) {
@@ -220,7 +223,9 @@ func subscribeToTriggers() {
 }
 
 func main() {
-	logger.Info("mqtt-lamarzocco", version.Info())
+	logger.Init("info", logger.Logger())
+	logger.Info("mqtt-lamarzocco", "version", version.Info())
+	initPprof()
 
 	if len(os.Args) < 2 {
 		logger.Error("No configuration file specified")
@@ -228,11 +233,11 @@ func main() {
 	}
 
 	configFile := os.Args[1]
-	logger.Info("Configuration file:", configFile)
+	logger.Info("Configuration file", "path", configFile)
 
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
-		logger.Error("Failed to load configuration", err)
+		logger.Error("Failed to load configuration", "error", err)
 		return
 	}
 
@@ -253,9 +258,20 @@ func main() {
 	// Connect to La Marzocco API
 	logger.Info("Connecting to La Marzocco API...")
 	if err := client.Connect(); err != nil {
-		logger.Error("Failed to connect to La Marzocco API", err)
+		logger.Error("Failed to connect to La Marzocco API", "error", err)
 		return
 	}
+
+	// Export machine status as expvar
+	expvar.Publish("machineStatus", expvar.Func(func() any {
+		return client.GetStatus()
+	}))
+	expvar.Publish("shots", expvar.Func(func() any {
+		return client.GetStatus().Shots
+	}))
+	expvar.Publish("flushes", expvar.Func(func() any {
+		return client.GetStatus().Flushes
+	}))
 
 	// Publish initial status
 	publishStatus(client.GetStatus())
@@ -279,7 +295,7 @@ func main() {
 		go func() {
 			err := webServer.Start(cfg.Web.Port)
 			if err != nil {
-				logger.Error("Failed to start web server", err)
+				logger.Error("Failed to start web server", "error", err)
 			}
 		}()
 		logger.Info("Application is now ready. Web interface available at http://localhost:" + strconv.Itoa(cfg.Web.Port) + ". Press Ctrl+C to quit.")
@@ -291,4 +307,10 @@ func main() {
 
 	close(stopPolling)
 	logger.Info("Received quit signal")
+}
+
+func initPprof() {
+	go func() {
+		http.ListenAndServe(":6060", nil)
+	}()
 }

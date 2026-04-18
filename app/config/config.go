@@ -48,7 +48,7 @@ type LaMarzoccoConfig struct {
 func LoadConfig(file string) (Config, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		logger.Error("Error reading config file", err)
+		logger.Error("Error reading config file", "error", err)
 		return Config{}, err
 	}
 
@@ -56,7 +56,7 @@ func LoadConfig(file string) (Config, error) {
 
 	err = json.Unmarshal(data, &cfg)
 	if err != nil {
-		logger.Error("Unmarshaling JSON:", err)
+		logger.Error("Unmarshaling JSON", "error", err)
 		return Config{}, err
 	}
 

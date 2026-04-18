@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Coffee, Sun, Moon, Wifi, WifiOff, Settings, Power, PowerOff, Thermometer, Battery, Scale } from 'lucide-react';
+import { Coffee, Sun, Moon, Wifi, WifiOff, Settings, Power, PowerOff, Thermometer, Battery, Scale, GlassWater, SprayCan } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { setMode, setDose, startBackFlush, setPower } from '@/lib/api';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -209,6 +209,14 @@ export function App() {
                   )}
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <GlassWater className="h-4 w-4 text-foreground" />
+                <span className="text-muted-foreground">Shots <span className="tabular-nums">{status.shots}</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <SprayCan className="h-4 w-4 text-foreground" />
+                <span className="text-muted-foreground">Flushes <span className="tabular-nums">{status.flushes}</span></span>
+              </div>
             </div>
           </div>
         )}

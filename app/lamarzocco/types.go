@@ -67,6 +67,8 @@ type MachineStatus struct {
 	MachineOn bool         `json:"machineOn"`
 	Boilers   *BoilersInfo `json:"boilers,omitempty"`
 	Scale     *ScaleInfo   `json:"scale,omitempty"`
+	Shots     int          `json:"shots"`
+	Flushes   int          `json:"flushes"`
 }
 
 type AuthResponse struct {

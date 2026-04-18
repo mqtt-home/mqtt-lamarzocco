@@ -26,3 +26,4 @@ shelly-commands
 dist/
 
 node_modules/
+app/build

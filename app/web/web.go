@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/mqtt-home/mqtt-lamarzocco/lamarzocco"
 	"github.com/philipparndt/go-logger"
-	loggerchi "github.com/philipparndt/go-logger-chi"
+	loggerchi "github.com/philipparndt/go-logger/chi"
 )
 
 type SSEClient struct {
@@ -75,7 +75,7 @@ func (ws *WebServer) broadcastLoop() {
 }
 
 func (ws *WebServer) setupRoutes() {
-	ws.router.Use(loggerchi.Middleware())
+	ws.router.Use(loggerchi.Logger())
 	ws.router.Use(middleware.Recoverer)
 
 	ws.router.Use(cors.Handler(cors.Options{

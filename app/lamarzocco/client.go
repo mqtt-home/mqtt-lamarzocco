@@ -37,6 +37,8 @@ type Client struct {
 	boilers           *BoilersInfo
 	scale             *ScaleInfo
 	powerCommandTime  time.Time // Time of last power command (to ignore polling for 10s)
+	totalCoffee       int
+	totalFlush        int
 	modeLock          sync.RWMutex
 
 	onStatusChange func(MachineStatus)
@@ -428,6 +430,8 @@ func (c *Client) fetchCurrentMode() error {
 	oldMachineOn := c.machineOn
 	oldBoilers := c.boilers
 	oldScale := c.scale
+	oldTotalCoffee := c.totalCoffee
+	oldTotalFlush := c.totalFlush
 
 	// Check if we should ignore machineOn from API (within 10s of power command)
 	ignoreMachineOn := time.Since(c.powerCommandTime) < 10*time.Second
@@ -444,6 +448,14 @@ func (c *Client) fetchCurrentMode() error {
 	c.boilers = data.boilers
 	c.scale = data.scale
 	c.modeLock.Unlock()
+
+	// Fetch counters from stats API
+	c.fetchCounters()
+
+	c.modeLock.RLock()
+	newTotalCoffee := c.totalCoffee
+	newTotalFlush := c.totalFlush
+	c.modeLock.RUnlock()
 
 	// Check if anything changed
 	changed := oldMode != data.mode || oldMachineOn != data.machineOn
@@ -466,6 +478,9 @@ func (c *Client) fetchCurrentMode() error {
 		}
 	}
 	if !changed && data.scale != nil && (oldScale == nil || oldScale.Connected != data.scale.Connected || oldScale.BatteryLevel != data.scale.BatteryLevel) {
+		changed = true
+	}
+	if !changed && (newTotalCoffee != oldTotalCoffee || newTotalFlush != oldTotalFlush) {
 		changed = true
 	}
 
@@ -786,6 +801,37 @@ func (c *Client) StartBackFlush() error {
 	return nil
 }
 
+func (c *Client) fetchCounters() {
+	url := fmt.Sprintf("%s/things/%s/stats/COFFEE_AND_FLUSH_COUNTER/1", BaseURL, c.serial)
+
+	resp, err := c.doAuthenticatedRequest("GET", url, nil)
+	if err != nil {
+		logger.Debug("Failed to fetch counters", "error", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+
+	var result struct {
+		Output struct {
+			TotalCoffee int `json:"totalCoffee"`
+			TotalFlush  int `json:"totalFlush"`
+		} `json:"output"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Debug("Failed to decode counters", "error", err)
+		return
+	}
+
+	c.modeLock.Lock()
+	c.totalCoffee = result.Output.TotalCoffee
+	c.totalFlush = result.Output.TotalFlush
+	c.modeLock.Unlock()
+}
+
 func (c *Client) GetStatus() MachineStatus {
 	c.modeLock.RLock()
 	mode := c.currentMode
@@ -794,6 +840,8 @@ func (c *Client) GetStatus() MachineStatus {
 	machineOn := c.machineOn
 	boilers := c.boilers
 	scale := c.scale
+	totalCoffee := c.totalCoffee
+	totalFlush := c.totalFlush
 	c.modeLock.RUnlock()
 
 	return MachineStatus{
@@ -806,6 +854,8 @@ func (c *Client) GetStatus() MachineStatus {
 		MachineOn: machineOn,
 		Boilers:   boilers,
 		Scale:     scale,
+		Shots:     totalCoffee,
+		Flushes:   totalFlush,
 	}
 }
 

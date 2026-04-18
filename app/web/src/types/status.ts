@@ -31,6 +31,8 @@ export interface MachineStatus {
   machineOn?: boolean;
   boilers?: BoilersInfo;
   scale?: ScaleInfo;
+  shots: number;
+  flushes: number;
 }
 
 export function getModeDisplayName(mode: DoseMode): string {
