@@ -47,12 +47,7 @@ func NewWebServer(client *lamarzocco.Client) *WebServer {
 		statusChan: make(chan lamarzocco.MachineStatus, 10),
 	}
 
-	// Set callback to receive status updates
-	originalCallback := client.SetStatusChangeCallback
-	client.SetStatusChangeCallback(func(status lamarzocco.MachineStatus) {
-		ws.onStatusChange(status)
-	})
-	_ = originalCallback // suppress unused warning
+	client.AddStatusChangeListener(ws.onStatusChange)
 
 	ws.setupRoutes()
 	go ws.broadcastLoop()

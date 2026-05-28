@@ -252,8 +252,8 @@ func main() {
 		cfg.LaMarzocco.Password,
 	)
 
-	// Set callback to publish status on change
-	client.SetStatusChangeCallback(publishStatus)
+	// Publish status changes to MQTT
+	client.AddStatusChangeListener(publishStatus)
 
 	// Connect to La Marzocco API
 	logger.Info("Connecting to La Marzocco API...")

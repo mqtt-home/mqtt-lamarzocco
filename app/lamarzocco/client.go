@@ -41,7 +41,8 @@ type Client struct {
 	totalFlush        int
 	modeLock          sync.RWMutex
 
-	onStatusChange func(MachineStatus)
+	statusListeners []func(MachineStatus)
+	listenersLock   sync.RWMutex
 }
 
 func NewClient(username, password string) *Client {
@@ -55,8 +56,10 @@ func NewClient(username, password string) *Client {
 	}
 }
 
-func (c *Client) SetStatusChangeCallback(callback func(MachineStatus)) {
-	c.onStatusChange = callback
+func (c *Client) AddStatusChangeListener(listener func(MachineStatus)) {
+	c.listenersLock.Lock()
+	defer c.listenersLock.Unlock()
+	c.statusListeners = append(c.statusListeners, listener)
 }
 
 // registerClient performs the initial registration with /auth/init
@@ -860,8 +863,13 @@ func (c *Client) GetStatus() MachineStatus {
 }
 
 func (c *Client) notifyStatusChange() {
-	if c.onStatusChange != nil {
-		c.onStatusChange(c.GetStatus())
+	status := c.GetStatus()
+	c.listenersLock.RLock()
+	listeners := make([]func(MachineStatus), len(c.statusListeners))
+	copy(listeners, c.statusListeners)
+	c.listenersLock.RUnlock()
+	for _, l := range listeners {
+		l(status)
 	}
 }
 
