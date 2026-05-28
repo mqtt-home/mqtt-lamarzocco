@@ -5,6 +5,8 @@ FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/web
 
+ENV CI=true
+
 # Copy package files
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 
