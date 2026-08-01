@@ -27,3 +27,5 @@ dist/
 
 node_modules/
 app/build
+
+__debug_bin*
