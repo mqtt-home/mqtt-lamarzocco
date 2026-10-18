@@ -8,6 +8,8 @@ import './index.css'
 // Follow the system appearance live (index.html sets it before first paint).
 const dark = matchMedia('(prefers-color-scheme: dark)')
 dark.addEventListener('change', (e) => {
+  // Embedded in the Wall Display panel: stay dark (it paints a dark gradient behind us).
+  if (document.documentElement.dataset.embed === 'wall-display') return
   document.documentElement.classList.toggle('dark', e.matches)
   document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'
 })
