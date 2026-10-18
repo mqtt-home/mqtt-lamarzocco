@@ -140,8 +140,14 @@ func subscribeToTriggers() {
 		topicTriggers := triggers // capture triggers for closure
 		logger.Info("Subscribing to trigger topic", "topic", subscribeTopic, "triggers", len(topicTriggers))
 
+		subscribedAt := time.Now()
 		mqtt.Subscribe(subscribeTopic, func(msgTopic string, payload []byte) {
 			logger.Info("Received trigger message", "topic", msgTopic, "payload_len", len(payload))
+
+			if stale, reason := staleTrigger(payload, subscribedAt, time.Now()); stale {
+				logger.Info("Ignoring stale trigger message", "topic", msgTopic, "reason", reason)
+				return
+			}
 
 			payloadStr := string(payload)
 
