@@ -45,7 +45,6 @@ export function useSSE(): SSEHookReturn {
         try {
           const data = JSON.parse(event.data) as MachineStatus;
           setStatus(data);
-          console.log('Received SSE update:', data);
         } catch (err) {
           console.error('Failed to parse SSE message:', err);
           setError('Failed to parse server data');

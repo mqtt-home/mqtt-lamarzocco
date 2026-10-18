@@ -29,3 +29,8 @@ node_modules/
 app/build
 
 __debug_bin*
+
+# compiled leftovers of tsc -b; Vite must load vite.config.ts
+app/web/vite.config.js
+app/web/vite.config.d.ts
+app/web/*.tsbuildinfo

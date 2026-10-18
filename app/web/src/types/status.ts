@@ -35,19 +35,6 @@ export interface MachineStatus {
   flushes: number;
 }
 
-export function getModeDisplayName(mode: DoseMode): string {
-  switch (mode) {
-    case 'Dose1':
-      return 'Dose 1';
-    case 'Dose2':
-      return 'Dose 2';
-    case 'Continuous':
-      return 'Continuous';
-    default:
-      return mode;
-  }
-}
-
 export function getDoseWeight(mode: DoseMode, status?: MachineStatus): number | undefined {
   if (mode === 'Dose1' && status?.dose1?.weight) {
     return status.dose1.weight;

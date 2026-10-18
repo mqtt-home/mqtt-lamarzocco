@@ -9,7 +9,7 @@ require (
 	github.com/philipparndt/go-logger v1.10.0
 	github.com/philipparndt/go-logger/chi v1.10.0
 	github.com/philipparndt/mqtt-gateway v1.11.0
-	github.com/tidwall/gjson v1.19.0
+	github.com/tidwall/gjson v1.20.0
 )
 
 require (

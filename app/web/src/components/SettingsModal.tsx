@@ -1,232 +1,177 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Droplets, Check } from 'lucide-react';
-import { MachineStatus } from '@/types/status';
+import { useState, useEffect, useRef } from 'react'
+import { Check, Droplets, X } from 'lucide-react'
+import { MachineStatus } from '@/types/status'
+import { useI18n } from '@/lib/i18n'
+
+type DoseId = 'Dose1' | 'Dose2'
 
 interface SettingsModalProps {
-  isOpen: boolean;
-  status: MachineStatus | null;
-  onSaveDose: (doseId: 'Dose1' | 'Dose2', weight: number) => Promise<void>;
-  onBackFlush: () => Promise<void>;
-  onClose: () => void;
+  isOpen: boolean
+  status: MachineStatus | null
+  onSaveDose: (doseId: DoseId, weight: number) => Promise<void>
+  onBackFlush: () => Promise<void>
+  onClose: () => void
 }
 
 export function SettingsModal({ isOpen, status, onSaveDose, onBackFlush, onClose }: SettingsModalProps) {
-  const machineOn = status?.machineOn ?? false;
-  const [dose1, setDose1] = useState<string>('');
-  const [dose2, setDose2] = useState<string>('');
-  const [saving, setSaving] = useState<'dose1' | 'dose2' | null>(null);
-  const [saved, setSaved] = useState<'dose1' | 'dose2' | null>(null);
-  const [backflushing, setBackflushing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const wasOpen = useRef(false);
+  const i = useI18n()
+  const machineOn = status?.machineOn ?? false
+  const [values, setValues] = useState<Record<DoseId, string>>({ Dose1: '', Dose2: '' })
+  const [saving, setSaving] = useState<DoseId | null>(null)
+  const [saved, setSaved] = useState<DoseId | null>(null)
+  const [backflushing, setBackflushing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const wasOpen = useRef(false)
 
-  // Only sync values from server when modal opens, not on every status update
+  // Only take the values from the server when the sheet opens, not on every status update.
   useEffect(() => {
     if (isOpen && !wasOpen.current && status) {
-      setDose1(String(status.dose1?.weight ?? ''));
-      setDose2(String(status.dose2?.weight ?? ''));
-      setError(null);
+      const fmt = (w?: number) => (w === undefined ? '' : i.grams(w))
+      setValues({ Dose1: fmt(status.dose1?.weight), Dose2: fmt(status.dose2?.weight) })
+      setError(null)
     }
-    wasOpen.current = isOpen;
-  }, [isOpen, status]);
+    wasOpen.current = isOpen
+  }, [isOpen, status, i])
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isOpen) return;
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isOpen, onClose])
 
-  const handleSave = async (doseId: 'Dose1' | 'Dose2') => {
-    const weightStr = doseId === 'Dose1' ? dose1 : dose2;
-    const weight = parseFloat(weightStr);
-
+  const handleSave = async (doseId: DoseId) => {
+    // Accept both decimal comma and point.
+    const weight = parseFloat(values[doseId].replace(',', '.'))
     if (isNaN(weight) || weight < 5 || weight > 100) {
-      setError('Weight must be between 5 and 100 grams');
-      return;
+      setError(i.t('dose.invalid'))
+      return
     }
-
-    const doseKey = doseId === 'Dose1' ? 'dose1' : 'dose2';
-    setSaving(doseKey);
-    setError(null);
-
+    setSaving(doseId)
+    setError(null)
     try {
-      await onSaveDose(doseId, weight);
-      setSaved(doseKey);
-      setTimeout(() => setSaved(null), 1500);
-    } catch (err) {
-      setError('Failed to save dose weight');
+      await onSaveDose(doseId, weight)
+      setSaved(doseId)
+      setTimeout(() => setSaved(null), 1500)
+    } catch {
+      setError(i.t('dose.failed'))
     } finally {
-      setSaving(null);
+      setSaving(null)
     }
-  };
+  }
 
-  if (!isOpen) return null;
+  const handleBackFlush = async () => {
+    setBackflushing(true)
+    setError(null)
+    try {
+      await onBackFlush()
+      // The paddle has to be engaged within 15 seconds.
+      setTimeout(() => setBackflushing(false), 15000)
+    } catch {
+      setError(i.t('backflush.failed'))
+      setBackflushing(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  const off = !machineOn ? 'opacity-50 pointer-events-none' : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-card border border-border rounded-lg shadow-lg w-full max-w-sm mx-4 p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold text-foreground">Settings</h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-accent transition-colors"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
+    <div className="sheet-wrap" role="dialog" aria-modal="true" aria-label={i.t('settings')}>
+      <div className="sheet-backdrop" onClick={onClose} />
+      <div className="sheet">
+        <div className="sheet-h">
+          <h2>{i.t('settings')}</h2>
+          <button className="icon-btn ml-auto" onClick={onClose} aria-label={i.t('close')} title={i.t('close')}>
+            <X className="size-5" />
           </button>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm">
-            {error}
+        {(error || !machineOn) && (
+          <div className="space-y-2 px-[18px] pt-3">
+            {error && (
+              <p className="text-sm" style={{ color: 'var(--alert)' }}>
+                {error}
+              </p>
+            )}
+            {!machineOn && (
+              <p className="text-sm" style={{ color: 'var(--warn)' }}>
+                {i.t('settings.off')}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Machine off warning */}
-        {!machineOn && (
-          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-600 dark:text-amber-400 text-sm">
-            Machine is off. Turn on the machine to change settings.
+        <div className={`sheet-sec ${off}`}>
+          <div className="kicker">{i.t('doses')}</div>
+          <div className="space-y-2.5">
+            {(['Dose1', 'Dose2'] as DoseId[]).map((id) => (
+              <div key={id} className="flex items-center gap-3">
+                <label htmlFor={id} className="w-16 shrink-0 text-sm font-medium">
+                  {i.t(`mode.${id}`)}
+                </label>
+                <div className="field flex-1">
+                  <input
+                    id={id}
+                    type="text"
+                    inputMode="decimal"
+                    className="num"
+                    value={values[id]}
+                    onChange={(e) => setValues((v) => ({ ...v, [id]: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSave(id)}
+                  />
+                  <span className="unit">g</span>
+                </div>
+                <button
+                  className="btn sm w-[104px]"
+                  onClick={() => handleSave(id)}
+                  disabled={saving === id}
+                  style={saved === id ? { color: 'var(--ok)' } : undefined}
+                >
+                  {saving === id ? '…' : saved === id ? <Check className="size-4" /> : i.t('save')}
+                </button>
+              </div>
+            ))}
           </div>
-        )}
-
-        {/* Dose Settings */}
-        <div className={`space-y-4 ${!machineOn ? 'opacity-50 pointer-events-none' : ''}`}>
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Dose Weights
-          </h3>
-
-          {/* Dose 1 */}
-          <div className="flex items-center gap-3">
-            <label htmlFor="dose1" className="w-20 text-sm font-medium text-foreground">
-              Dose 1
-            </label>
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                id="dose1"
-                type="number"
-                min={5}
-                max={100}
-                step={0.1}
-                value={dose1}
-                onChange={(e) => setDose1(e.target.value)}
-                className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
-              <span className="text-sm text-muted-foreground">g</span>
-              <button
-                onClick={() => handleSave('Dose1')}
-                disabled={saving === 'dose1'}
-                className={`w-14 h-9 rounded-lg text-sm text-primary-foreground transition-[background-color] disabled:opacity-50 flex items-center justify-center ${
-                  saved === 'dose1'
-                    ? 'bg-green-500'
-                    : 'bg-primary hover:bg-primary/90'
-                }`}
-              >
-                {saving === 'dose1' ? '...' : saved === 'dose1' ? <Check className="h-4 w-4" /> : 'Save'}
-              </button>
-            </div>
-          </div>
-
-          {/* Dose 2 */}
-          <div className="flex items-center gap-3">
-            <label htmlFor="dose2" className="w-20 text-sm font-medium text-foreground">
-              Dose 2
-            </label>
-            <div className="flex-1 flex items-center gap-2">
-              <input
-                id="dose2"
-                type="number"
-                min={5}
-                max={100}
-                step={0.1}
-                value={dose2}
-                onChange={(e) => setDose2(e.target.value)}
-                className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
-              <span className="text-sm text-muted-foreground">g</span>
-              <button
-                onClick={() => handleSave('Dose2')}
-                disabled={saving === 'dose2'}
-                className={`w-14 h-9 rounded-lg text-sm text-primary-foreground transition-[background-color] disabled:opacity-50 flex items-center justify-center ${
-                  saved === 'dose2'
-                    ? 'bg-green-500'
-                    : 'bg-primary hover:bg-primary/90'
-                }`}
-              >
-                {saving === 'dose2' ? '...' : saved === 'dose2' ? <Check className="h-4 w-4" /> : 'Save'}
-              </button>
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Min: 5g, Max: 100g
+          <p className="mt-2 text-xs" style={{ color: 'var(--ink-3)' }}>
+            {i.t('dose.range')}
           </p>
         </div>
 
-        {/* Back Flush */}
-        <div className={`mt-6 pt-4 border-t border-border ${!machineOn ? 'opacity-50 pointer-events-none' : ''}`}>
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">
-            Maintenance
-          </h3>
+        <div className={`sheet-sec ${off}`}>
+          <div className="kicker">{i.t('maintenance')}</div>
           {backflushing ? (
-            <div className="p-4 bg-amber-500/20 border border-amber-500/40 rounded-lg">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-medium">
-                <Droplets className="h-5 w-5 animate-pulse" />
-                Move paddle to ON within 15 seconds
+            <div className="alert-banner warn">
+              <span className="ico sm">
+                <Droplets className="animate-pulse" />
+              </span>
+              <div className="min-w-0">
+                <div className="t">{i.t('backflush.active')}</div>
+                <div className="s">{i.t('backflush.activeHint')}</div>
               </div>
-              <p className="mt-2 text-sm text-amber-600/80 dark:text-amber-400/80">
-                The back flush cycle will start when you engage the paddle
-              </p>
             </div>
           ) : (
             <>
-              <button
-                onClick={async () => {
-                  setBackflushing(true);
-                  setError(null);
-                  try {
-                    await onBackFlush();
-                    // Reset after 15 seconds (paddle engagement window)
-                    setTimeout(() => setBackflushing(false), 15000);
-                  } catch (err) {
-                    setError('Failed to start back flush');
-                    setBackflushing(false);
-                  }
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-500/20 transition-colors"
-              >
-                <Droplets className="h-4 w-4" />
-                Start Back Flush
+              <button className="btn" onClick={handleBackFlush}>
+                <Droplets className="size-4" />
+                {i.t('backflush.start')}
               </button>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Insert blind filter before starting
+              <p className="mt-2 text-xs" style={{ color: 'var(--ink-3)' }}>
+                {i.t('backflush.hint')}
               </p>
             </>
           )}
         </div>
 
-        {/* Close button */}
-        <div className="mt-6">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 border border-border rounded-lg text-foreground hover:bg-accent transition-colors"
-          >
-            Close
+        <div className="sheet-sec">
+          <button className="btn w-full" onClick={onClose}>
+            {i.t('close')}
           </button>
         </div>
       </div>
     </div>
-  );
+  )
 }
