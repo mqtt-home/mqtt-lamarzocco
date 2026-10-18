@@ -13,6 +13,7 @@ import (
 
 	"github.com/mqtt-home/mqtt-lamarzocco/config"
 	"github.com/mqtt-home/mqtt-lamarzocco/lamarzocco"
+	"github.com/mqtt-home/mqtt-lamarzocco/trigger"
 	"github.com/mqtt-home/mqtt-lamarzocco/version"
 	"github.com/mqtt-home/mqtt-lamarzocco/web"
 	"github.com/philipparndt/go-logger"
@@ -144,7 +145,7 @@ func subscribeToTriggers() {
 		mqtt.Subscribe(subscribeTopic, func(msgTopic string, payload []byte) {
 			logger.Info("Received trigger message", "topic", msgTopic, "payload_len", len(payload))
 
-			if stale, reason := staleTrigger(payload, subscribedAt, time.Now()); stale {
+			if stale, reason := trigger.Stale(payload, subscribedAt, time.Now()); stale {
 				logger.Info("Ignoring stale trigger message", "topic", msgTopic, "reason", reason)
 				return
 			}

@@ -1,11 +1,11 @@
-package main
+package trigger
 
 import (
 	"testing"
 	"time"
 )
 
-func TestStaleTrigger(t *testing.T) {
+func TestStale(t *testing.T) {
 	now := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
 	longAgo := now.Add(-time.Hour)   // subscribed long before the message
 	justNow := now.Add(-time.Second) // message arrives right after subscribe
@@ -33,9 +33,9 @@ func TestStaleTrigger(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, reason := staleTrigger(tt.payload, tt.subscribedAt, now)
+			got, reason := Stale(tt.payload, tt.subscribedAt, now)
 			if got != tt.want {
-				t.Fatalf("staleTrigger() = %v (%q), want %v", got, reason, tt.want)
+				t.Fatalf("Stale() = %v (%q), want %v", got, reason, tt.want)
 			}
 			if got && reason == "" {
 				t.Fatal("stale without a reason")
