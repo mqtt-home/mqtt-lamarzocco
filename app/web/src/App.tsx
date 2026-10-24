@@ -2,7 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Check, Coffee, GlassWater, Power, Scale, Settings, Thermometer, Wind } from 'lucide-react'
 import { useSSE } from '@/hooks/useSSE'
 import { setMode, setDose, startBackFlush, setPower } from '@/lib/api'
-import { LANGS, useI18n, type I18n } from '@/lib/i18n'
+import { LangSwitch as BaseLangSwitch, useI18n, type I18n } from '@/lib/i18n'
 import { BoilerInfo, DoseMode, MachineStatus, getDoseWeight } from '@/types/status'
 import { SettingsModal } from '@/components/SettingsModal'
 
@@ -64,16 +64,7 @@ export function App() {
 }
 
 function LangSwitch() {
-  const i = useI18n()
-  return (
-    <div className="seg" role="group" aria-label={i.t('language')}>
-      {LANGS.map((l) => (
-        <button key={l} aria-pressed={i.lang === l} onClick={() => i.setLang(l)}>
-          {l.toUpperCase()}
-        </button>
-      ))}
-    </div>
-  )
+  return <BaseLangSwitch i18n={useI18n()} />
 }
 
 function MachineCard({ status, connected }: { status: MachineStatus | null; connected: boolean }) {
